@@ -2,97 +2,167 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Controller;
 use App\Models\Film;
 use Illuminate\Http\Request;
+use Storage;
+use Validator;
 
 class FilmController extends Controller
 {
-    public function index(){
-        $film = Film::latest()->get();
-        $response = [
-            'success' => 'true',
-            'message' => 'Daftar film',
-            'data' => $film,
-        ];
-
-        return response()->json($response, 200);
+    public function index()
+    {
+        $films = Film::with(['genre', 'aktor'])->get();
+        return response()->json([
+            'success' => true,
+            'message' => 'Data Film',
+            'data' => $films,
+        ], 200);
     }
 
     public function store(Request $request)
     {
-        $film = new Film();
-        $film->judul = $request->judul;
-        $film->slug = $request->slug;
-        $film->foto = $request->foto;
-        $film->deskripsi = $request->deskripsi;
-        $film->url_video = $request->url_video;
-        $film->id_kategori = $request->id_kategori;
-        $film->id_genre = $request->id_genre;
-        $film->id_aktor = $request->id_aktor;
-        $film->save();
-        return response()->json([
-            'success' => true,
-            'message' => 'Data berhasil disimpan',
-        ], 201);
+        $validator = Validator::make($request->all(), [
+            'judul' => 'required|string|unique:films',
+            'slug' => 'required|string',
+            'deskripsi' => 'required|string',
+            'foto' => 'required|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'url_video' => 'required|string',
+            'id_kategori' => 'required|exists:kategoris,id',
+            'genre' => 'required|array',
+            'aktor' => 'required|array',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi Gagal',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            $path = $request->file('foto')->store('public/foto');
+
+            $film = Film::create([
+                'judul' => $request->judul,
+                'slug' => $request->slug,
+                'deskripsi' => $request->deskripsi,
+                'foto' => $path,
+                'url_video' => $request->url_video,
+                'id_kategori' => $request->id_kategori,
+            ]);
+
+            $film->genre()->sync($request->genre);
+            $film->aktor()->sync($request->aktor);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data berhasil disimpan',
+                'data' => $film,
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan',
+                'errors' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function show($id)
     {
-        $film = Film::find($id);
-        if($film) {
+        try {
+            $film = Film::with(['genre', 'aktor'])->findOrFail($id);
             return response()->json([
                 'success' => true,
-                'message' => 'detail film disimpan',
+                'message' => 'Detail Film',
                 'data' => $film,
             ], 200);
-        } else {
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'data tidak ditemukan',
+                'message' => 'Data tidak ditemukan',
             ], 404);
         }
     }
 
     public function update(Request $request, $id)
     {
-        $film = Film::find($id);
-        if($film) {
-            $film->judul = $request->judul;
-            $film->slug = $request->slug;
-            $film->foto = $request->foto;
-            $film->deskripsi = $request->deskripsi;
-            $film->url_video = $request->url_video;
-            $film->id_kategori = $request->id_kategori;
-            $film->id_genre = $request->id_genre;
-            $film->id_aktor = $request->id_aktor;
-        $film->save();
-        return response()->json([
-            'success' => true,
-            'message' => 'Data berhasil diperbarui',
-        ], 200);
-    } else {
-        return response()->json([
-            'success' => false,
-            'message' => 'data tidak ditemukan',
-        ], 404);
+        $film = Film::findOrFail($id);
 
-    }
-}
-
-public function destroy($id)
-{
-    $film = film::find($id);
-    if($film) {
-        $film->delete();
-        return response()->json([
-            'success' => true,
-            'message' => 'data' . $film->judul . 'berhasil dihapus',
+        $validator = Validator::make($request->all(), [
+            'judul' => 'required|string|unique:films,judul,' . $id,
+            'slug' => 'required|string',
+            'deskripsi' => 'required|string',
+            'foto' => 'image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            'url_video' => 'required|string',
+            'id_kategori' => 'required|exists:kategoris,id',
+            'genre' => 'required|array',
+            'aktor' => 'required|array',
         ]);
-    } else {
-        return response()->json([
-            'success' => true,
-            'message' => 'data tidak ditemukan',
-        ], 404);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi Gagal',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        try {
+            if ($request->hasFile('foto')) {
+                // Delete old photo
+                Storage::delete($film->foto);
+
+                $path = $request->file('foto')->store('public/foto');
+                $film->foto = $path;
+            }
+
+            $film->update($request->only(['judul', 'deskripsi', 'url_video', 'id_kategori']));
+
+            if ($request->has('genre')) {
+                $film->genre()->sync($request->genre);
+            }
+
+            if ($request->has('aktor')) {
+                $film->aktor()->sync($request->aktor);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data berhasil diperbarui',
+                'data' => $film,
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred',
+                'errors' => $e->getMessage(),
+            ], 500);
+        }
     }
-}
+
+    public function destroy($id)
+    {
+        try {
+            $film = Film::findOrFail($id);
+
+            // Delete photo
+            Storage::delete($film->foto);
+
+            $film->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Data deleted successfully',
+                'data' => null,
+            ], 204);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Data not found',
+            ], 404);
+        }
+    }
 }
