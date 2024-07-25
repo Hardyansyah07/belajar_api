@@ -150,14 +150,15 @@ class FilmController extends Controller
 
             // Delete photo
             Storage::delete($film->foto);
+            $film->aktor()->detach();
+            $film->genre()->detach();
 
             $film->delete();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Data deleted successfully',
-                'data' => null,
-            ], 204);
+            ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
