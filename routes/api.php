@@ -23,8 +23,8 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::post('logout', [AuthController::class, 'logout']);
+// Route::middleware(['auth:sanctum'])->group(function () {
+//     Route::post('logout', [AuthController::class, 'logout']);
 
 // route kategori    
 Route::get('kategori', [KategoriController::class, 'index']);
@@ -53,7 +53,7 @@ Route::post('aktor', [AktorController::class, 'store']);
 Route::get('aktor/{id}', [AktorController::class, 'show']);
 Route::put('aktor/{id}', [AktorController::class, 'update']);
 Route::delete('aktor/{id}', [AktorController::class, 'destroy']);
-});
+// });
 
 // route film
 Route::post('login', [AuthController::class, 'login']);
